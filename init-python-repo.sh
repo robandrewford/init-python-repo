@@ -51,6 +51,8 @@ echo "Initializing ${PROJECT_NAME} (Python ${PYTHON_VERSION}, type: ${PROJECT_TY
 # We force the name to PROJECT_NAME to ensures it's a valid Python identifier
 # and to avoid uv's automatic dash-conversion for the package structure it might infer.
 uv init . --python "$PYTHON_VERSION" --no-workspace --name "$PROJECT_NAME"
+# Remove default hello.py/main.py created by uv init to avoid mypy errors
+rm -f hello.py main.py
 # Some uv versions might still use the directory name for the project name field in pyproject.toml
 sed -i '' "s/name = \".*\"/name = \"$PROJECT_NAME\"/" pyproject.toml
 echo "$PYTHON_VERSION" > .python-version
@@ -205,11 +207,13 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.14.1
+  - repo: local
     hooks:
       - id: mypy
-        additional_dependencies: []
+        name: mypy
+        entry: uv run mypy
+        language: system
+        types: [python]
   - repo: https://github.com/PyCQA/bandit
     rev: 1.8.0
     hooks:
@@ -231,11 +235,13 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.14.1
+  - repo: local
     hooks:
       - id: mypy
-        additional_dependencies: []
+        name: mypy
+        entry: uv run mypy
+        language: system
+        types: [python]
 EOF
 fi
 
@@ -257,7 +263,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - name: Setup uv
@@ -333,19 +339,22 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 EOF
         cat > "tests/test_api.py" << EOF
-from httpx import ASGITransport, AsyncClient
+from typing import AsyncIterator
+
 import pytest
+from httpx import ASGITransport, AsyncClient
+
 from ${PROJECT_NAME}.main import app
 
 
 @pytest.fixture
-async def client():
+async def client() -> AsyncIterator[AsyncClient]:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
 
 @pytest.mark.asyncio
-async def test_health(client):
+async def test_health(client: AsyncClient) -> None:
     response = await client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
@@ -369,12 +378,13 @@ if __name__ == "__main__":
 EOF
         cat > "tests/test_cli.py" << EOF
 from typer.testing import CliRunner
+
 from ${PROJECT_NAME}.main import app
 
 runner = CliRunner()
 
 
-def test_main():
+def test_main() -> None:
     result = runner.invoke(app, ["--name", "test"])
     assert result.exit_code == 0
     assert "Hello, test!" in result.stdout
@@ -383,7 +393,7 @@ EOF
     tui)
         cat > "src/${PROJECT_NAME}/app.py" << EOF
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static
+from textual.widgets import Footer, Header, Static
 
 
 class ${PROJECT_NAME^}App(App):
@@ -407,13 +417,14 @@ if __name__ == "__main__":
 EOF
         cat > "tests/test_app.py" << EOF
 import pytest
+
 from ${PROJECT_NAME}.app import ${PROJECT_NAME^}App
 
 
 @pytest.mark.asyncio
-async def test_app_runs():
+async def test_app_runs() -> None:
     app = ${PROJECT_NAME^}App()
-    async with app.run_test() as pilot:
+    async with app.run_test():
         assert app.is_running
 EOF
         mkdir -p "src/${PROJECT_NAME}/css"
@@ -441,10 +452,11 @@ def transform(df: pl.DataFrame) -> pl.DataFrame:
 EOF
         cat > "tests/test_pipeline.py" << EOF
 import polars as pl
+
 from ${PROJECT_NAME}.pipeline import transform
 
 
-def test_transform():
+def test_transform() -> None:
     df = pl.DataFrame({"a": [1, 2, 3]})
     result = transform(df)
     assert result.shape == (3, 1)
@@ -452,7 +464,7 @@ EOF
         ;;
     library)
         cat > "tests/test_placeholder.py" << 'EOF'
-def test_placeholder():
+def test_placeholder() -> None:
     assert True
 EOF
         ;;
