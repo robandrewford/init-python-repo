@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from .config import License, ProjectConfig, ProjectType
+from .config import (
+    CORE_DEV_DEPS,
+    DEV_DEPS,
+    RUNTIME_DEPS,
+    SECURITY_DEV_DEPS,
+    License,
+    ProjectConfig,
+    ProjectType,
+)
 
 # =============================================================================
 # License Templates
@@ -246,14 +254,24 @@ def get_license_content(license_type: License, author: str) -> str:
 
 def get_pyproject_toml(config: ProjectConfig) -> str:
     """Generate pyproject.toml content."""
-    # Base section - NO self-referential dependency (FIX #1)
+    # Collect runtime dependencies based on project type
+    runtime_deps = RUNTIME_DEPS.get(config.project_type, [])
+
+    # Format dependencies list
+    if runtime_deps:
+        deps_str = ",\n    ".join(f'"{dep}"' for dep in runtime_deps)
+        deps_line = f'[\n    {deps_str},\n]'
+    else:
+        deps_line = "[]"
+
+    # Base section
     content = f'''[project]
 name = "{config.package_name}"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">={config.python_version}"
-dependencies = []
+dependencies = {deps_line}
 '''
 
     # Add license if specified
@@ -275,6 +293,26 @@ packages = ["src/{config.package_name}"]
         content += f'''
 [project.scripts]
 {config.package_name} = "{config.package_name}.main:app"
+'''
+
+    # Dependency groups for dev dependencies
+    dev_deps = list(CORE_DEV_DEPS)
+
+    # Add project-type-specific dev deps
+    type_dev_deps = DEV_DEPS.get(config.project_type, [])
+    dev_deps.extend(type_dev_deps)
+
+    # Add security deps if enabled
+    if config.features.security:
+        dev_deps.extend(SECURITY_DEV_DEPS)
+
+    # Format dev dependencies
+    dev_deps_str = ",\n    ".join(f'"{dep}"' for dep in dev_deps)
+    content += f'''
+[dependency-groups]
+dev = [
+    {dev_deps_str},
+]
 '''
 
     # Tool configurations

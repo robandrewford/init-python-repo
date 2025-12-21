@@ -7,10 +7,6 @@ import subprocess
 from pathlib import Path
 
 from .config import (
-    CORE_DEV_DEPS,
-    DEV_DEPS,
-    RUNTIME_DEPS,
-    SECURITY_DEV_DEPS,
     License,
     ProjectConfig,
     ProjectType,
@@ -121,11 +117,11 @@ class ProjectGenerator:
         # Initialize with uv
         self._init_uv()
 
-        # Install dependencies
-        self._install_dependencies()
-
-        # Generate all files
+        # Generate config files (including pyproject.toml with all dependencies)
+        # This also runs uv lock and uv sync to install everything
         self._generate_config_files()
+
+        # Generate source and test files
         self._generate_source_files()
         self._generate_test_files()
         self._generate_github_files()
@@ -194,30 +190,6 @@ class ProjectGenerator:
 
         # Write .python-version
         self._write_file(".python-version", f"{self.config.python_version}\n")
-
-    def _install_dependencies(self) -> None:
-        """Install project dependencies."""
-        # Core dev dependencies
-        if CORE_DEV_DEPS:
-            self._run(["uv", "add", "--dev", *CORE_DEV_DEPS], clean_env=True)
-
-        # Project-type-specific runtime deps
-        runtime = RUNTIME_DEPS.get(self.config.project_type, [])
-        if runtime:
-            self._run(["uv", "add", *runtime], clean_env=True)
-
-        # Project-type-specific dev deps
-        dev = DEV_DEPS.get(self.config.project_type, [])
-        if dev:
-            self._run(["uv", "add", "--dev", *dev], clean_env=True)
-
-        # Security deps
-        if self.config.features.security:
-            self._run(["uv", "add", "--dev", *SECURITY_DEV_DEPS], clean_env=True)
-
-        # Lock and sync
-        self._run(["uv", "lock"], clean_env=True)
-        self._run(["uv", "sync"], clean_env=True)
 
     def _generate_config_files(self) -> None:
         """Generate configuration files."""

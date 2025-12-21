@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run:*)",
+      "Bash(uv pip list:*)",
+      "Bash(uv --version:*)",
+      "Bash(uv help:*)",
+      "Bash(cat:*)"
+    ]
+  }
+}
