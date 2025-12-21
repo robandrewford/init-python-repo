@@ -4,8 +4,14 @@ set -euo pipefail
 #==============================================================================
 # Configuration
 #==============================================================================
+# Unset VIRTUAL_ENV to avoid uv warnings when running inside a venv
+unset VIRTUAL_ENV
+
 PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
-PROJECT_NAME="$(basename "$PWD")"
+# Original directory name from the path
+PROJECT_DIR_NAME="$(basename "$PWD")"
+# Sanitized name for Python package/module usage (using underscores)
+PROJECT_NAME="$(echo "$PROJECT_DIR_NAME" | tr '-' '_' | tr '.' '_')"
 
 # Feature flags (override via environment)
 INCLUDE_VSCODE="${INCLUDE_VSCODE:-true}"
@@ -21,6 +27,12 @@ PROJECT_TYPE="${PROJECT_TYPE:-library}"
 #==============================================================================
 # Validation
 #==============================================================================
+# Prevent project name that shadowing dev dependency
+if [[ "$PROJECT_NAME" == "test-repo" ]]; then
+    echo "ERROR: Project name 'test-repo' is invalid due to shadowing." >&2
+    exit 1
+fi
+
 if [[ -f "pyproject.toml" ]]; then
     echo "ERROR: pyproject.toml already exists" >&2
     exit 1
@@ -36,14 +48,25 @@ echo "Initializing ${PROJECT_NAME} (Python ${PYTHON_VERSION}, type: ${PROJECT_TY
 #==============================================================================
 # Base initialization
 #==============================================================================
-uv init . --python "$PYTHON_VERSION"
+# We force the name to PROJECT_NAME to ensures it's a valid Python identifier
+# and to avoid uv's automatic dash-conversion for the package structure it might infer.
+uv init . --python "$PYTHON_VERSION" --no-workspace --name "$PROJECT_NAME"
+# Some uv versions might still use the directory name for the project name field in pyproject.toml
+sed -i '' "s/name = \".*\"/name = \"$PROJECT_NAME\"/" pyproject.toml
 echo "$PYTHON_VERSION" > .python-version
+
+# Configure uv to treat the project as a package for local discovery
+cat >> pyproject.toml << EOF
+
+[tool.uv]
+package = true
+EOF
 
 #==============================================================================
 # Dependencies by project type
 #==============================================================================
 # Core dev dependencies (all project types)
-uv add --dev ruff pytest pytest-cov mypy pre-commit
+uv add --dev ruff pytest pytest-cov mypy pre-commit pytest-asyncio
 
 case "$PROJECT_TYPE" in
     api)
@@ -83,6 +106,9 @@ uv sync
 #==============================================================================
 cat >> pyproject.toml << EOF
 
+[project.scripts]
+${PROJECT_NAME} = "${PROJECT_NAME}.main:app"
+
 [tool.ruff]
 line-length = 120
 target-version = "py${PYTHON_VERSION//./}"
@@ -98,7 +124,11 @@ python_version = "${PYTHON_VERSION}"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --cov=src --cov-report=term-missing"
+asyncio_mode = "auto"
 EOF
+
+# Force editable install of the current project to ensure source is discoverable
+uv add --dev --editable .
 
 if [[ "$PROJECT_TYPE" == "tui" ]]; then
     cat >> pyproject.toml << 'EOF'
@@ -155,6 +185,13 @@ AWS_PROFILE=
 EOF
         ;;
 esac
+
+#==============================================================================
+# Final project registration
+#==============================================================================
+# Run a final sync to ensures the project itself is installed and discoverable
+# We do this at the end to avoid uv thinking the project is a dependency before its config is written
+uv sync
 
 #==============================================================================
 # Pre-commit config
@@ -736,7 +773,7 @@ EOF
 # Git init + pre-commit install
 #==============================================================================
 git init --quiet
-uv run pre-commit install --quiet
+uv run pre-commit install
 
 #==============================================================================
 # Summary
@@ -757,23 +794,21 @@ echo "Next steps:"
 echo "  cd ${PROJECT_NAME}"
 echo "  source .venv/bin/activate"
 [[ "$INCLUDE_MAKEFILE" == "true" ]] && echo "  make test"
-```
 
-**Usage examples:**
-```bash
+# Usage examples:
+#
 # Default library project
-mkdir mylib && cd mylib
-~/scripts/init-python-repo.sh
-
+# mkdir mylib && cd mylib
+# ~/scripts/init-python-repo.sh
+#
 # TUI project with Python 3.13
-mkdir mytui && cd mytui
-PROJECT_TYPE=tui PYTHON_VERSION=3.13 ~/scripts/init-python-repo.sh
-
+# mkdir mytui && cd mytui
+# PROJECT_TYPE=tui PYTHON_VERSION=3.13 ~/scripts/init-python-repo.sh
+#
 # API without Docker
-mkdir myapi && cd myapi
-PROJECT_TYPE=api INCLUDE_DOCKER=false ~/scripts/init-python-repo.sh
-
+# mkdir myapi && cd myapi
+# PROJECT_TYPE=api INCLUDE_DOCKER=false ~/scripts/init-python-repo.sh
+#
 # Minimal library (no optional features)
-mkdir minimal && cd minimal
-INCLUDE_VSCODE=false INCLUDE_DOCKER=false INCLUDE_SECURITY=false ~/scripts/init-python-repo.sh
-```
+# mkdir minimal && cd minimal
+# INCLUDE_VSCODE=false INCLUDE_DOCKER=false INCLUDE_SECURITY=false ~/scripts/init-python-repo.sh
