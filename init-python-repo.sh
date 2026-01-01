@@ -471,6 +471,13 @@ EOF
 esac
 
 #==============================================================================
+# direnv configuration
+#==============================================================================
+cat > .envrc << 'EOF'
+source .venv/bin/activate
+EOF
+
+#==============================================================================
 # EditorConfig
 #==============================================================================
 cat > .editorconfig << 'EOF'
@@ -674,6 +681,7 @@ generate_tree() {
     echo "├── .pre-commit-config.yaml"
     echo "├── .python-version"
     echo "├── .gitignore"
+    echo "├── .envrc"
     echo "├── .env.example"
     echo "├── .editorconfig"
     [[ "$INCLUDE_VSCODE" == "true" ]] && echo "├── .vscode/"
@@ -711,6 +719,14 @@ $(generate_tree)
 
 \`\`\`bash
 uv sync
+\`\`\`
+
+**Note:** This project uses [direnv](https://direnv.net/) for automatic virtual environment activation.
+When you \`cd\` into the project directory, direnv will automatically activate the \`.venv\`.
+On first use, you'll need to run \`direnv allow\` to approve the \`.envrc\` file.
+
+Alternatively, you can manually activate the virtual environment:
+\`\`\`bash
 source .venv/bin/activate
 \`\`\`
 
